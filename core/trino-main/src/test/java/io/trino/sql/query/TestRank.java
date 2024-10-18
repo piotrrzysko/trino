@@ -11,27 +11,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package io.trino.sql.query;
 
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class TestLead
+public class TestRank
 {
-    @Test
-    public void testNullOffset()
-    {
-        try (QueryAssertions assertions = new QueryAssertions()) {
-            assertThat(assertions.query("""
-                    SELECT lead(v, null) OVER (ORDER BY k)
-                    FROM (VALUES (1, 10), (2, 20)) t(k, v)
-                    """))
-                    .failure()
-                    .hasMessageMatching("Offset must not be null");
-        }
-    }
-
     @Test
     public void testWindowFrame()
     {
@@ -54,12 +42,12 @@ public class TestLead
                                                  PARTITION BY custkey
                                                  ORDER BY orderdate
                                                  RANGE BETWEEN INTERVAL '1' MONTH PRECEDING AND CURRENT ROW) AS past_month_avg,
-                           lead(totalprice) OVER ( PARTITION BY custkey
+                           rank() OVER ( PARTITION BY custkey
                                                   ORDER BY orderdate
                                                   RANGE BETWEEN INTERVAL '1' MONTH PRECEDING AND CURRENT ROW) AS previous_total_price_within_last_month
                     FROM orders
                     """))
-                    .failure().hasMessageContaining("Cannot specify window frame for lead function");
+                    .failure().hasMessageContaining("Cannot specify window frame for rank function");
         }
     }
 }

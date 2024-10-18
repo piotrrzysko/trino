@@ -30,4 +30,35 @@ public class TestLag
                     .failure().hasMessageMatching("Offset must not be null");
         }
     }
+
+    @Test
+    public void testWindowFrame()
+    {
+        try (QueryAssertions assertions = new QueryAssertions()) {
+            assertThat(assertions.query("""
+                        WITH orders (custkey, orderdate, totalprice)\s
+                        AS
+                        (
+                        VALUES
+                        ('cust_1', DATE '2020-10-10', 100),
+                        ('cust_2', DATE '2020-10-10', 15),
+                        ('cust_1', DATE '2020-10-15', 200),
+                        ('cust_1', DATE '2020-10-16', 240),
+                        ('cust_2', DATE '2020-12-20', 25),
+                        ('cust_1', DATE '2020-12-25', 140),
+                        ('cust_2', DATE '2021-01-01', 5)
+                    )
+                    SELECT *,
+                           avg(totalprice) OVER (
+                                                 PARTITION BY custkey
+                                                 ORDER BY orderdate
+                                                 RANGE BETWEEN INTERVAL '1' MONTH PRECEDING AND CURRENT ROW) AS past_month_avg,
+                           lag(totalprice) OVER ( PARTITION BY custkey
+                                                  ORDER BY orderdate
+                                                  RANGE BETWEEN INTERVAL '1' MONTH PRECEDING AND CURRENT ROW) AS previous_total_price_within_last_month
+                    FROM orders
+                    """))
+                    .failure().hasMessageContaining("Cannot specify window frame for lag function");
+        }
+    }
 }
