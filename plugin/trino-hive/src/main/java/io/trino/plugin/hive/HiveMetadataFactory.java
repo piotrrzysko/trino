@@ -78,6 +78,7 @@ public class HiveMetadataFactory
     private final boolean partitionProjectionEnabled;
     private final boolean allowTableRename;
     private final HiveTimestampPrecision hiveViewsTimestampPrecision;
+    private final Executor metadataFetchingExecutor;
 
     @Inject
     public HiveMetadataFactory(
@@ -136,7 +137,8 @@ public class HiveMetadataFactory
                 transactionScopeCachingDirectoryListerFactory,
                 hiveConfig.isPartitionProjectionEnabled(),
                 allowTableRename,
-                hiveConfig.getTimestampPrecision());
+                hiveConfig.getTimestampPrecision(),
+                hiveConfig.getMetadataParallelism());
     }
 
     public HiveMetadataFactory(
@@ -173,7 +175,8 @@ public class HiveMetadataFactory
             TransactionScopeCachingDirectoryListerFactory transactionScopeCachingDirectoryListerFactory,
             boolean partitionProjectionEnabled,
             boolean allowTableRename,
-            HiveTimestampPrecision hiveViewsTimestampPrecision)
+            HiveTimestampPrecision hiveViewsTimestampPrecision,
+            int metadataParallelism)
     {
         this.catalogName = requireNonNull(catalogName, "catalogName is null");
         this.skipDeletionForAlter = skipDeletionForAlter;
@@ -216,6 +219,7 @@ public class HiveMetadataFactory
         this.partitionProjectionEnabled = partitionProjectionEnabled;
         this.allowTableRename = allowTableRename;
         this.hiveViewsTimestampPrecision = requireNonNull(hiveViewsTimestampPrecision, "hiveViewsTimestampPrecision is null");
+        this.metadataFetchingExecutor = new BoundedExecutor(executorService, metadataParallelism);
     }
 
     @Override
@@ -264,6 +268,7 @@ public class HiveMetadataFactory
                 partitionProjectionEnabled,
                 allowTableRename,
                 maxPartitionDropsPerQuery,
-                hiveViewsTimestampPrecision);
+                hiveViewsTimestampPrecision,
+                metadataFetchingExecutor);
     }
 }
