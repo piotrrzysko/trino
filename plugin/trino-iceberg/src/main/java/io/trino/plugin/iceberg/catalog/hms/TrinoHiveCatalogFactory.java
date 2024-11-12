@@ -14,6 +14,7 @@
 package io.trino.plugin.iceberg.catalog.hms;
 
 import com.google.inject.Inject;
+import io.airlift.concurrent.BoundedExecutor;
 import io.trino.filesystem.TrinoFileSystemFactory;
 import io.trino.plugin.hive.NodeVersion;
 import io.trino.plugin.hive.TrinoViewHiveMetastore;
@@ -29,6 +30,8 @@ import io.trino.spi.security.ConnectorIdentity;
 import io.trino.spi.type.TypeManager;
 
 import java.util.Optional;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 
 import static io.trino.plugin.hive.metastore.cache.CachingHiveMetastore.createPerTransactionCache;
 import static io.trino.plugin.iceberg.IcebergSecurityConfig.IcebergSecurity.SYSTEM;
@@ -48,6 +51,7 @@ public class TrinoHiveCatalogFactory
     private final boolean isUsingSystemSecurity;
     private final boolean deleteSchemaLocationsFallback;
     private final boolean hideMaterializedViewStorageTable;
+    private final Executor metadataFetchingExecutor;
 
     @Inject
     public TrinoHiveCatalogFactory(
@@ -58,7 +62,9 @@ public class TrinoHiveCatalogFactory
             TypeManager typeManager,
             IcebergTableOperationsProvider tableOperationsProvider,
             NodeVersion nodeVersion,
-            IcebergSecurityConfig securityConfig)
+            IcebergSecurityConfig securityConfig,
+            IcebergHiveCatalogConfig catalogConfig,
+            ExecutorService executorService)
     {
         this.catalogName = requireNonNull(catalogName, "catalogName is null");
         this.metastoreFactory = requireNonNull(metastoreFactory, "metastoreFactory is null");
@@ -70,6 +76,7 @@ public class TrinoHiveCatalogFactory
         this.isUsingSystemSecurity = securityConfig.getSecuritySystem() == SYSTEM;
         this.deleteSchemaLocationsFallback = config.isDeleteSchemaLocationsFallback();
         this.hideMaterializedViewStorageTable = config.isHideMaterializedViewStorageTable();
+        this.metadataFetchingExecutor = new BoundedExecutor(executorService, catalogConfig.getMetadataParallelism());
     }
 
     @Override
@@ -86,6 +93,7 @@ public class TrinoHiveCatalogFactory
                 isUniqueTableLocation,
                 isUsingSystemSecurity,
                 deleteSchemaLocationsFallback,
-                hideMaterializedViewStorageTable);
+                hideMaterializedViewStorageTable,
+                metadataFetchingExecutor);
     }
 }

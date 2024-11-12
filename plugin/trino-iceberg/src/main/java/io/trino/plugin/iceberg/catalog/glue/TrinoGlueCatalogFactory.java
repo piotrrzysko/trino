@@ -15,6 +15,7 @@ package io.trino.plugin.iceberg.catalog.glue;
 
 import com.amazonaws.services.glue.AWSGlueAsync;
 import com.google.inject.Inject;
+import io.airlift.concurrent.BoundedExecutor;
 import io.trino.filesystem.TrinoFileSystemFactory;
 import io.trino.plugin.hive.NodeVersion;
 import io.trino.plugin.hive.metastore.glue.GlueMetastoreStats;
@@ -31,6 +32,8 @@ import org.weakref.jmx.Flatten;
 import org.weakref.jmx.Managed;
 
 import java.util.Optional;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 
 import static io.trino.plugin.iceberg.IcebergSecurityConfig.IcebergSecurity.SYSTEM;
 import static java.util.Objects.requireNonNull;
@@ -50,6 +53,7 @@ public class TrinoGlueCatalogFactory
     private final boolean hideMaterializedViewStorageTable;
     private final GlueMetastoreStats stats;
     private final boolean isUsingSystemSecurity;
+    private final Executor metadataFetchingExecutor;
 
     @Inject
     public TrinoGlueCatalogFactory(
@@ -63,7 +67,8 @@ public class TrinoGlueCatalogFactory
             IcebergGlueCatalogConfig catalogConfig,
             IcebergSecurityConfig securityConfig,
             GlueMetastoreStats stats,
-            AWSGlueAsync glueClient)
+            AWSGlueAsync glueClient,
+            ExecutorService executorService)
     {
         this.catalogName = requireNonNull(catalogName, "catalogName is null");
         this.fileSystemFactory = requireNonNull(fileSystemFactory, "fileSystemFactory is null");
@@ -77,6 +82,7 @@ public class TrinoGlueCatalogFactory
         this.hideMaterializedViewStorageTable = icebergConfig.isHideMaterializedViewStorageTable();
         this.stats = requireNonNull(stats, "stats is null");
         this.isUsingSystemSecurity = securityConfig.getSecuritySystem() == SYSTEM;
+        this.metadataFetchingExecutor = new BoundedExecutor(executorService, catalogConfig.getMetadataParallelism());
     }
 
     @Managed
@@ -101,6 +107,7 @@ public class TrinoGlueCatalogFactory
                 isUsingSystemSecurity,
                 defaultSchemaLocation,
                 isUniqueTableLocation,
-                hideMaterializedViewStorageTable);
+                hideMaterializedViewStorageTable,
+                metadataFetchingExecutor);
     }
 }
