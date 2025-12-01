@@ -18,6 +18,7 @@ import io.trino.client.IntervalDayTime;
 import io.trino.client.IntervalYearMonth;
 import io.trino.spi.TrinoException;
 import io.trino.spi.type.TimeZoneKey;
+import io.trino.sql.tree.IntervalLiteral;
 import org.joda.time.DateTime;
 import org.joda.time.DurationFieldType;
 import org.joda.time.MutablePeriod;
@@ -34,6 +35,7 @@ import org.joda.time.format.PeriodFormatterBuilder;
 import org.joda.time.format.PeriodParser;
 
 import java.time.DateTimeException;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,6 +48,10 @@ import java.util.stream.Stream;
 import static com.google.common.base.Preconditions.checkArgument;
 import static io.trino.spi.StandardErrorCode.INVALID_LITERAL;
 import static io.trino.sql.tree.IntervalLiteral.IntervalField;
+import static io.trino.sql.tree.IntervalLiteral.IntervalField.DAY;
+import static io.trino.sql.tree.IntervalLiteral.IntervalField.SECOND;
+import static io.trino.sql.tree.IntervalLiteral.Sign.NEGATIVE;
+import static io.trino.sql.tree.IntervalLiteral.Sign.POSITIVE;
 import static io.trino.util.DateTimeZoneIndex.getChronology;
 import static io.trino.util.DateTimeZoneIndex.packDateTimeWithZone;
 import static java.lang.Math.toIntExact;
@@ -252,6 +258,16 @@ public final class DateTimeUtils
         }
 
         throw invalidQualifier(startField, endField.orElse(startField));
+    }
+
+    public static IntervalLiteral formatDayTimeInterval(Duration duration)
+    {
+        long millis = duration.toMillis();
+
+        IntervalLiteral.Sign sign = millis < 0 ? NEGATIVE : POSITIVE;
+        String value = IntervalDayTime.formatMillis(Math.abs(millis));
+
+        return new IntervalLiteral(value, sign, DAY, Optional.of(SECOND));
     }
 
     private static long parsePeriodMillis(PeriodFormatter periodFormatter, String value)

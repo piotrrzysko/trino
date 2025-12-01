@@ -13,12 +13,18 @@
  */
 package io.trino.type;
 
+import io.trino.sql.ExpressionFormatter;
 import io.trino.sql.query.QueryAssertions;
+import io.trino.sql.query.QueryAssertions.ExpressionAssertProvider.Result;
+import io.trino.sql.tree.IntervalLiteral;
+import org.intellij.lang.annotations.Language;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.parallel.Execution;
+
+import java.time.Duration;
 
 import static io.trino.spi.StandardErrorCode.INVALID_FUNCTION_ARGUMENT;
 import static io.trino.spi.function.OperatorType.ADD;
@@ -32,6 +38,7 @@ import static io.trino.spi.function.OperatorType.NEGATION;
 import static io.trino.spi.function.OperatorType.SUBTRACT;
 import static io.trino.spi.type.VarcharType.VARCHAR;
 import static io.trino.testing.assertions.TrinoExceptionAssert.assertTrinoExceptionThrownBy;
+import static io.trino.util.DateTimeUtils.formatDayTimeInterval;
 import static java.util.concurrent.TimeUnit.DAYS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS;
@@ -522,5 +529,71 @@ public class TestIntervalDayTime
 
         assertThat(assertions.operator(INDETERMINATE, "INTERVAL '45' MINUTE TO SECOND"))
                 .isEqualTo(false);
+    }
+
+    @Test
+    void testIntervalDayTimeRoundTrip()
+    {
+        testIntervalDayTimeRoundTrip("INTERVAL '0' SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '0.000' SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '45' SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '0.555' SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '59.999' SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '60' SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '61' SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '3661' SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '90061' SECOND");
+
+        testIntervalDayTimeRoundTrip("INTERVAL '0' MINUTE");
+        testIntervalDayTimeRoundTrip("INTERVAL '25' MINUTE");
+        testIntervalDayTimeRoundTrip("INTERVAL '15:30' MINUTE TO SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '59:00.999' MINUTE TO SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '60' MINUTE");
+        testIntervalDayTimeRoundTrip("INTERVAL '61' MINUTE");
+        testIntervalDayTimeRoundTrip("INTERVAL '1500' MINUTE");
+        testIntervalDayTimeRoundTrip("INTERVAL '1501' MINUTE");
+
+        testIntervalDayTimeRoundTrip("INTERVAL '0' HOUR");
+        testIntervalDayTimeRoundTrip("INTERVAL '8' HOUR");
+        testIntervalDayTimeRoundTrip("INTERVAL '2:45' HOUR TO MINUTE");
+        testIntervalDayTimeRoundTrip("INTERVAL '2:00:45' HOUR TO SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '1:30:45' HOUR TO SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '1:00:00.999' HOUR TO SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '24' HOUR");
+        testIntervalDayTimeRoundTrip("INTERVAL '25' HOUR");
+        testIntervalDayTimeRoundTrip("INTERVAL '17520' HOUR");
+
+        testIntervalDayTimeRoundTrip("INTERVAL '0' DAY");
+        testIntervalDayTimeRoundTrip("INTERVAL '340' DAY");
+        testIntervalDayTimeRoundTrip("INTERVAL '2 6' DAY TO HOUR");
+        testIntervalDayTimeRoundTrip("INTERVAL '3 0:30' DAY TO MINUTE");
+        testIntervalDayTimeRoundTrip("INTERVAL '3 12:30' DAY TO MINUTE");
+        testIntervalDayTimeRoundTrip("INTERVAL '1 0:00:15' DAY TO SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '1 4:20:15' DAY TO SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '1 0:00:00.999' DAY TO SECOND");
+        testIntervalDayTimeRoundTrip("INTERVAL '1 23:59:59.999' DAY TO SECOND");
+    }
+
+    private void testIntervalDayTimeRoundTrip(@Language("SQL") String intervalSql)
+    {
+        Result positiveResult = assertions.expression(intervalSql).evaluate();
+        testIntervalDayTimeRoundTrip(positiveResult);
+
+        Result negativeResult = assertions.operator(NEGATION, intervalSql).evaluate();
+        testIntervalDayTimeRoundTrip(negativeResult);
+    }
+
+    private void testIntervalDayTimeRoundTrip(Result evaluatedResult)
+    {
+        assertThat(evaluatedResult.type()).isEqualTo(IntervalDayTimeType.INTERVAL_DAY_TIME);
+        SqlIntervalDayTime originalInterval = (SqlIntervalDayTime) evaluatedResult.value();
+
+        Duration duration = Duration.ofMillis(originalInterval.getMillis());
+        IntervalLiteral formattedLiteral = formatDayTimeInterval(duration);
+        String formattedSql = ExpressionFormatter.formatExpression(formattedLiteral);
+
+        Result reparsedResult = assertions.expression(formattedSql).evaluate();
+        SqlIntervalDayTime reparsedInterval = (SqlIntervalDayTime) reparsedResult.value();
+        assertThat(reparsedInterval).isEqualTo(originalInterval);
     }
 }
