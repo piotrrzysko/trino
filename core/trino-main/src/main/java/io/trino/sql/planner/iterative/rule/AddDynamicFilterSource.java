@@ -48,6 +48,39 @@ import static io.trino.sql.planner.plan.Patterns.source;
  * For task retry mode, dynamic filters are removed from the JoinNode/SemiJoinNode
  * and rewritten into a DynamicFilterSourceNode below the remote exchange on the
  * build side of the join.
+ * <p>
+ * In fault-tolerant execution, a stage starts only after all its child stages complete.
+ * Since probe splits are generated before any probe task runs, the filter must
+ * already be available at that point. If filter collection happened
+ * at the join, connectors waiting for dynamic filters via
+ * {@link io.trino.spi.connector.DynamicFilter#isBlocked()} would deadlock: splits wait
+ * for filter, but filter requires join to run, which requires splits.
+ * <p>
+ * By placing DynamicFilterSourceNode in the build stage, filters are collected
+ * and sent to the coordinator before probe split generation begins.
+ * <p>
+ * Example:
+ * <pre>
+ * Query: SELECT * FROM lineitem JOIN orders ON l_orderkey = o_orderkey
+ *
+ * Without DynamicFilterSourceNode (deadlock):
+ *   Stage 1 (Build):  TableScan[orders] -> RemoteExchange
+ *   Stage 0 (Probe):  TableScan[lineitem] -> Join (collects DF)
+ *
+ *   1. Build stage completes
+ *   2. Probe split generation starts, connector calls isBlocked()
+ *   3. Waits for filter... but join hasn't run yet (needs splits first)
+ *   4. DEADLOCK
+ *
+ * With DynamicFilterSourceNode:
+ *   Stage 1 (Build):  TableScan[orders] -> DynamicFilterSourceNode -> RemoteExchange
+ *   Stage 0 (Probe):  TableScan[lineitem] (uses DF from coordinator) -> Join
+ *
+ *   1. Build stage runs, DynamicFilterSourceNode collects filter, sends to the coordinator
+ *   2. Build stage completes, filter available at the coordinator
+ *   3. Probe split generation starts, filter already available
+ *   4. Splits generated with pruning, probe tasks execute
+ * </pre>
  */
 public final class AddDynamicFilterSource
 {
